@@ -210,11 +210,11 @@ def pr2_mover(object_list):
 
 if __name__ == '__main__':
 
-     # TODO: ROS node initialization
+    # TODO: ROS node initialization
     rospy.init_node('clustering', anonymous=True)
 
     # TODO: Create Subscribers
-    pcl_sub = rospy.Subscriber("/sensor_stick/point_cloud", pc2.PointCloud2, pcl_callback, queue_size=1)
+    pcl_sub = rospy.Subscriber("/camera/depth_registered/points", pc2.PointCloud2, pcl_callback, queue_size=1)
 
     # TODO: Create Publishers
     pcl_objects_pub = rospy.Publisher("/pcl_objects", PointCloud2, queue_size=1)
@@ -229,3 +229,5 @@ if __name__ == '__main__':
     get_color_list.color_list = []
 
     # TODO: Spin while node is not shutdown
+    while not rospy.is_shutdown():
+        rospy.spin()

@@ -51,20 +51,35 @@ def pcl_callback(pcl_msg):
 
 # TODO: Convert ROS msg to PCL data
     pcl_cloud = ros_to_pcl(pcl_msg)
+    
+    fil = pcl_cloud.make_statistical_outlier_filter()
+    fil.set_mean_k(50)
+    fil.set_std_dev_mul_thresh(1.0)
+    cloud_filtered = fil.filter()
 
     # TODO: Voxel Grid Downsampling
-    vox = pcl_cloud.make_voxel_grid_filter()
-    LEAF_SIZE = 0.01
+    vox = cloud_filtered.make_voxel_grid_filter()
+    LEAF_SIZE = 0.001
     vox.set_leaf_size(LEAF_SIZE, LEAF_SIZE, LEAF_SIZE)
-    cloud_filtered = vox.filter()
+    #cloud_filtered = vox.filter()
+    
 
     # TODO: PassThrough Filter
     passthrough = cloud_filtered.make_passthrough_filter()
     passthrough.set_filter_field_name('z')
-    z_min = 0.76
+    z_min = 0.63
     z_max = 1.1
     passthrough.set_filter_limits(z_min, z_max)
     cloud_filtered = passthrough.filter()
+
+    #To isolate edges of boxes
+    passthrough1 = cloud_filtered.make_passthrough_filter()
+    passthrough1.set_filter_field_name('y')
+    y_min = -0.4
+    y_max = 0.4
+    passthrough1.set_filter_limits(y_min, y_max)
+    cloud_filtered = passthrough1.filter()
+    #pcl.save(cloud_filtered, 'test.pcd')
 
     # TODO: RANSAC Plane Segmentation
     seg = cloud_filtered.make_segmenter()
@@ -135,7 +150,7 @@ def pcl_callback(pcl_msg):
         cluster_ros = pcl_to_ros(pcl_cluster)
 
         # Compute the associated feature vector
-        colour_hists = compute_color_histograms(cluster_ros)
+        colour_hists = compute_color_histograms(cluster_ros, using_hsv=True)
         cluster_norms = get_normals(cluster_ros)
         normal_hists = compute_normal_histograms(cluster_norms)
         feature = np.concatenate((colour_hists, normal_hists))
@@ -165,7 +180,7 @@ def pcl_callback(pcl_msg):
     # Could add some logic to determine whether or not your object detections are robust
     # before calling pr2_mover()
     try:
-        pr2_mover(detected_objects_list)
+        pr2_mover(detected_objects)
     except rospy.ROSInterruptException:
         pass
 
@@ -211,19 +226,25 @@ def pr2_mover(object_list):
 if __name__ == '__main__':
 
     # TODO: ROS node initialization
-    rospy.init_node('clustering', anonymous=True)
+    rospy.init_node('perception', anonymous=True)
 
     # TODO: Create Subscribers
-    pcl_sub = rospy.Subscriber("/camera/depth_registered/points", pc2.PointCloud2, pcl_callback, queue_size=1)
+    pcl_sub = rospy.Subscriber("/pr2/world/points", pc2.PointCloud2, pcl_callback, queue_size=1)
+    #pcl_sub = rospy.Subscriber("/camera/depth_registered/points", pc2.PointCloud2, pcl_callback, queue_size=1)
 
     # TODO: Create Publishers
-    pcl_objects_pub = rospy.Publisher("/pcl_objects", PointCloud2, queue_size=1)
-    pcl_table_pub = rospy.Publisher("/pcl_table", PointCloud2, queue_size=1)
-    pcl_cluster_pub = rospy.Publisher("/pcl_cluster", PointCloud2, queue_size=1)
+    pcl_objects_pub = rospy.Publisher("/pcl_objects", pc2.PointCloud2, queue_size=1)
+    pcl_table_pub = rospy.Publisher("/pcl_table", pc2.PointCloud2, queue_size=1)
+    pcl_cluster_pub = rospy.Publisher("/pcl_cluster", pc2.PointCloud2, queue_size=1)
     object_markers_pub = rospy.Publisher("/object_markers", Marker, queue_size=1)
     detected_objects_pub = rospy.Publisher("/detected_objects", DetectedObjectsArray, queue_size=1)
 
     # TODO: Load Model From disk
+    model = pickle.load(open('model.sav', 'rb'))
+    clf = model['classifier']
+    encoder = LabelEncoder()
+    encoder.classes_ = model['classes']
+    scaler = model['scaler']
 
     # Initialize color_list
     get_color_list.color_list = []
